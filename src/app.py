@@ -6,14 +6,7 @@ from PyQt6.QtWidgets import (
     QApplication,
     QMainWindow,
     QWidget,
-    QLabel,
-    QHBoxLayout,
     QVBoxLayout,
-    QGridLayout,
-    QGroupBox,
-    QLineEdit,
-    QDoubleSpinBox,
-    QFormLayout,
     QStatusBar
 )
 
@@ -68,9 +61,9 @@ class MainWindow(QMainWindow):
         self.connection_widget.set_connected_state(False)
         self.status_bar.showMessage("Disconnected")
 
-    @pyqtSlot()
-    def _on_ros_error(self, message:str):
-        self.status_bar.showMessage(f"Connection error: {message}")
+    @pyqtSlot(str)
+    def _on_ros_error(self, error:str ):
+        self.status_bar.showMessage(f"Connection error: {error}")
 
     def closeEvent(self, event):
         self.ros.publish_velocity(0.0, 0.0)

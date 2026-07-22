@@ -46,16 +46,22 @@ class RosBridgeConnection(QObject):
         """
         if self.client is not None:
             self.disconnect_from_bridge()
-
-        self.client = roslibpy.Ros(host, port)
-        self.client.on_ready(self._on_ready)
-        self.client.on('close', self._on_close)
-        self.client.on('error', self._on_error)
+        try:
+            self.client = roslibpy.Ros(host, port)
+            self.client.on_ready(self._on_ready)
+            self.client.on('close', self._on_close)
+            self.client.on('error', self._on_error)
+        except Exception as exc:
+            print(f"[RosBridgeConnection.py]: (connect_to_bridge) {str(exc)}")
+            self.connection_error.emit(str(exc))
+            return
 
         try:
             self.client.run(timeout=5)
         except Exception as exc:
+            print(f"[RosBridgeConnection.py]: (connect_to_bridge) {str(exc)}")
             self.connection_error.emit(str(exc))
+            return
 
     def disconnect_from_bridge(self):
         self._cmd_vel_timer.stop()
