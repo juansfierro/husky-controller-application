@@ -13,6 +13,7 @@ from PyQt6.QtWidgets import (
 from RosBridgeConnection import RosBridgeConnection
 from widgets.ConnectionWidget import ConnectionWidget
 from widgets.TeleopWidget import TeleopWidget
+from widgets.TelemetryWidget import TelemetryWidget
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -27,9 +28,12 @@ class MainWindow(QMainWindow):
 
         self.connection_widget = ConnectionWidget()
         self.teleop_widget = TeleopWidget()
+        self.telemetry_widget = TelemetryWidget()
 
         layout.addWidget(self.connection_widget)
         layout.addWidget(self.teleop_widget)
+        layout.addWidget(self.telemetry_widget)
+        layout.addStretch()
 
         central.setLayout(layout)
         self.setCentralWidget(central)
@@ -51,6 +55,9 @@ class MainWindow(QMainWindow):
         self.ros.connected.connect(self._on_ros_connected)
         self.ros.disconnected.connect(self._on_ros_disconnected)
         self.ros.connection_error.connect(self._on_ros_error)
+
+        self.ros.odom_received.connect(self.telemetry_widget.update_odom)
+        self.ros.battery_received.connect(self.telemetry_widget.update_battery)
 
         self.teleop_widget.velocity_command.connect(self.ros.publish_velocity)
 
