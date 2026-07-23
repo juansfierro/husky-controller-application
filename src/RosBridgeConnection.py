@@ -110,7 +110,7 @@ class RosBridgeConnection(QObject):
         )
         self.battery_topic.subscribe(self._on_battery_message)
 
-        self.cmd_vel_timer.start()
+        self._cmd_vel_timer.start()
 
         # Signals to the app that it is ready
         self.connected.emit()
@@ -131,6 +131,7 @@ class RosBridgeConnection(QObject):
     def publish_velocity(self, linear_x: float, angular_z: float):
         self._current_linear_x = linear_x
         self._current_angular_z = angular_z
+        print(f"[RosBridgeConnection.py]: (publish_velocity) Linear.x: {linear_x} | Angular.z: {angular_z}")
 
         self._publish_current_velocity()
 

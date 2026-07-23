@@ -12,6 +12,7 @@ from PyQt6.QtWidgets import (
 
 from RosBridgeConnection import RosBridgeConnection
 from widgets.ConnectionWidget import ConnectionWidget
+from widgets.TeleopWidget import TeleopWidget
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -25,8 +26,10 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout()
 
         self.connection_widget = ConnectionWidget()
+        self.teleop_widget = TeleopWidget()
 
         layout.addWidget(self.connection_widget)
+        layout.addWidget(self.teleop_widget)
 
         central.setLayout(layout)
         self.setCentralWidget(central)
@@ -34,6 +37,10 @@ class MainWindow(QMainWindow):
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
         self.status_bar.showMessage("Disconnected")
+
+        # Teleop controls are disabled on start.
+        # Enable on succesful connection to rosbridge server.
+        self.teleop_widget.set_enabled_controls(False)
 
         self._wire_signals()
 
@@ -45,12 +52,15 @@ class MainWindow(QMainWindow):
         self.ros.disconnected.connect(self._on_ros_disconnected)
         self.ros.connection_error.connect(self._on_ros_error)
 
+        self.teleop_widget.velocity_command.connect(self.ros.publish_velocity)
+
     @pyqtSlot()
     def _on_ros_connected(self):
         """
         Called when succesfully connected to RosBridge WebSocket
         """
         self.connection_widget.set_connected_state(True)
+        self.teleop_widget.set_enabled_controls(True)
         self.status_bar.showMessage("Connected to RosBridge")
 
     @pyqtSlot()
@@ -59,6 +69,7 @@ class MainWindow(QMainWindow):
         Called when disconnected from RosBridge WebSocket
         """
         self.connection_widget.set_connected_state(False)
+        self.teleop_widget.set_enabled_controls(False)
         self.status_bar.showMessage("Disconnected")
 
     @pyqtSlot(str)
