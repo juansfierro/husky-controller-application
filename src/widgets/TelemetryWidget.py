@@ -35,7 +35,7 @@ class TelemetryWidget(QGroupBox):
         y = pos.get("y", 0.0)
         self.pos_label.setText(f"x: {x:.2f} m, y: {y:.2f} m")
         self.linear_vel_label.setText(f"{linear.get("x", 0.0):.2f} m/s")
-        self.angular_vel_label.setTest(f"{angular.get("z", 0.0):.2f} rad/s")
+        self.angular_vel_label.setText(f"{angular.get("z", 0.0):.2f} rad/s")
 
     @pyqtSlot(dict)
     def update_battery(self, message: dict):

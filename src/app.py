@@ -1,19 +1,22 @@
 import sys
 from PyQt6.QtCore import (
-    pyqtSlot
+    pyqtSlot,
+    QSize
 )
 from PyQt6.QtWidgets import (
     QApplication,
     QMainWindow,
     QWidget,
     QVBoxLayout,
-    QStatusBar
+    QStatusBar,
+    QHBoxLayout,
 )
 
 from RosBridgeConnection import RosBridgeConnection
 from widgets.ConnectionWidget import ConnectionWidget
 from widgets.TeleopWidget import TeleopWidget
 from widgets.TelemetryWidget import TelemetryWidget
+from widgets.VideoStreamWidget import VideoStreamWidget
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -24,18 +27,27 @@ class MainWindow(QMainWindow):
         self.ros = RosBridgeConnection()
 
         central = QWidget()
+        mlayout = QHBoxLayout()
         layout = QVBoxLayout()
 
         self.connection_widget = ConnectionWidget()
+        self.connection_widget.setMaximumWidth(420)
         self.teleop_widget = TeleopWidget()
+        self.teleop_widget.setMaximumWidth(420)
         self.telemetry_widget = TelemetryWidget()
+        self.telemetry_widget.setMaximumWidth(420)
+        self.video_stream_widget = VideoStreamWidget(port=5000)
+        self.video_stream_widget.setMinimumSize(680, 520)
+
+        mlayout.addWidget(self.video_stream_widget)
 
         layout.addWidget(self.connection_widget)
         layout.addWidget(self.teleop_widget)
         layout.addWidget(self.telemetry_widget)
-        layout.addStretch()
 
-        central.setLayout(layout)
+        mlayout.addLayout(layout)
+
+        central.setLayout(mlayout)
         self.setCentralWidget(central)
 
         self.status_bar = QStatusBar()
@@ -45,6 +57,7 @@ class MainWindow(QMainWindow):
         # Teleop controls are disabled on start.
         # Enable on succesful connection to rosbridge server.
         self.teleop_widget.set_enabled_controls(False)
+        self.video_stream_widget.start()
 
         self._wire_signals()
 
