@@ -4,6 +4,7 @@ from PyQt6.QtCore import (
     QObject,
     QTimer,
     pyqtSignal,
+    pyqtSlot
 )
 
 class RosBridgeConnection(QObject):
@@ -37,6 +38,8 @@ class RosBridgeConnection(QObject):
         self._cmd_vel_timer.setInterval(int(1000 / self.CMD_VEL_RATE_HZ))
         self._cmd_vel_timer.timeout.connect(self._publish_current_velocity)
 
+        self.connected.connect(self._start_cmd_vel_timer)
+
     def is_connected(self) -> bool:
         return self._is_connected
 
@@ -47,9 +50,8 @@ class RosBridgeConnection(QObject):
         if self.client is not None:
             self.disconnect_from_bridge()
         try:
-            self.client = roslibpy.Ros(host, port)
+            self.client = roslibpy.Ros(host, port, transport='asyncio')
             self.client.on_ready(self._on_ready)
-            self.client.on('close', self._on_close)
             self.client.on('error', self._on_error)
         except Exception as exc:
             print(f"[RosBridgeConnection.py]: (connect_to_bridge) {str(exc)}")
@@ -88,6 +90,7 @@ class RosBridgeConnection(QObject):
             self.client = None
 
         self._is_connected = False
+        self._on_close()
 
     def _on_ready(self):
         self._is_connected = True
@@ -110,10 +113,12 @@ class RosBridgeConnection(QObject):
         )
         self.battery_topic.subscribe(self._on_battery_message)
 
-        self._cmd_vel_timer.start()
-
         # Signals to the app that it is ready
         self.connected.emit()
+
+    @pyqtSlot()
+    def _start_cmd_vel_timer(self):
+        self._cmd_vel_timer.start()
 
     def _on_close(self, *args):
         self._is_connected = False
