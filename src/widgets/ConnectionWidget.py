@@ -43,7 +43,7 @@ class ConnectionWidget(QGroupBox):
 
     def _on_connect_clicked(self):
         if self._connected:
-            self.disconnect_request.emit()
+            self.disconnect_requested.emit()
         else:
             host = self.host_input.text().strip()
             try:
