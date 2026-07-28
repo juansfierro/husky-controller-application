@@ -1,4 +1,5 @@
 from PyQt6.QtCore import (
+    Qt,
     pyqtSignal,
 )
 from PyQt6.QtWidgets import (
@@ -9,7 +10,10 @@ from PyQt6.QtWidgets import (
     QDoubleSpinBox,
     QPushButton
 )
-from PyQt6.QtGui import QFont
+from PyQt6.QtGui import (
+    QFont,
+    QKeyEvent
+)
 
 
 class TeleopWidget(QGroupBox):
@@ -28,6 +32,7 @@ class TeleopWidget(QGroupBox):
 
     def __init__(self):
         super().__init__("Teleop Control")
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
         layout = QVBoxLayout()
 
@@ -58,7 +63,7 @@ class TeleopWidget(QGroupBox):
             btn.setMinimumSize(80, 80)
             return btn
 
-        self.btn_forward = make_button("\u25b2") # ▲
+        self.btn_forward = make_button("\u25b2")
         self.btn_backward = make_button("\u25bc")
         self.btn_left = make_button("\u25c4")
         self.btn_right = make_button("\u25ba")
@@ -101,3 +106,47 @@ class TeleopWidget(QGroupBox):
         for btn in (self.btn_forward, self.btn_backward, self.btn_left, 
                     self.btn_right, self.btn_stop):
             btn.setEnabled(enabled)
+
+    def keyPressEvent(self, event: QKeyEvent):
+        if event.isAutoRepeat():
+            return
+
+        key = event.key()
+        if key == Qt.Key.Key_Up:
+            self.btn_forward.setDown(True)
+            self._send(1, 0)
+        elif key == Qt.Key.Key_Down:
+            self.btn_backward.setDown(True)
+            self._send(-1, 0)
+        elif key == Qt.Key.Key_Left:
+            self.btn_left.setDown(True)
+            self._send(0, 1)
+        elif key == Qt.Key.Key_Right:
+            self.btn_right.setDown(True)
+            self._send(0, -1)
+        elif key == Qt.Key.Key_Space:
+            self.btn_stop.setDown(True)
+        else:
+            super().keyPressEvent(event)
+
+    def keyReleaseEvent(self, event: QKeyEvent):
+        if event.isAutoRepeat():
+            return
+
+        key = event.key()
+        if key == Qt.Key.Key_Up:
+            self.btn_forward.setDown(False)
+            self._send(0, 0)
+        elif key == Qt.Key.Key_Down:
+            self.btn_backward.setDown(False)
+            self._send(0, 0)
+        elif key == Qt.Key.Key_Left:
+            self.btn_left.setDown(False)
+            self._send(0, 0)
+        elif key == Qt.Key.Key_Right:
+            self.btn_right.setDown(False)
+            self._send(0, 0)
+        elif key == Qt.Key.Key_Space:
+            self.btn_stop.setDown(False)
+        else:
+            super().keyReleaseEvent(event)
