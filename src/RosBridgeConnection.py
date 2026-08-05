@@ -21,11 +21,13 @@ class RosBridgeConnection(QObject):
 
     NAMESPACE = '/a200_0867'
     CMD_VEL_RATE_HZ = 10
+    IS_AWAKE_RATE_HZ = 5
 
     def __init__(self):
         super().__init__()
         self.client: roslibpy.Ros | None = None
         self.cmd_vel_topic: roslibpy.Topic | None = None
+        self.is_awake_topic: roslibpy.Topic | None = None
         self.odom_topic: roslibpy.Topic | None = None
         self.battery_topic: roslibpy.Topic | None = None
         self._is_connected = False
@@ -33,6 +35,12 @@ class RosBridgeConnection(QObject):
         #Robot Idle
         self._current_linear_x = 0.0
         self._current_angular_z = 0.0
+
+        self._is_awake_timer = QTimer(self)
+        self._is_awake_timer.setInterval(int(1000 / self.IS_AWAKE_RATE_HZ))
+        self._is_awake_timer.timeout.connect(self._publish_heartbeat)
+
+        self.connected.connect(self._start_is_awake_timer)
 
         self._cmd_vel_timer = QTimer(self)
         self._cmd_vel_timer.setInterval(int(1000 / self.CMD_VEL_RATE_HZ))
@@ -70,6 +78,10 @@ class RosBridgeConnection(QObject):
         self._current_linear_x = 0.0
         self._current_angular_z = 0.0
 
+        if self.is_awake_topic is not None:
+            self.is_awake_topic.unadvertise()
+            self.is_awake_topic = None
+
         if self.cmd_vel_topic is not None:
             self.cmd_vel_topic.unadvertise()
             self.cmd_vel_topic = None
@@ -95,6 +107,12 @@ class RosBridgeConnection(QObject):
     def _on_ready(self):
         self._is_connected = True
 
+        self.is_awake_topic = roslibpy.Topic(
+            self.client, f"{self.NAMESPACE}/is_awake",
+            "std_msgs/msg/Bool"
+        )
+        self.is_awake_topic.advertise()
+
         self.cmd_vel_topic = roslibpy.Topic(
             self.client, f"{self.NAMESPACE}/cmd_vel",
             "geometry_msgs/msg/TwistStamped"
@@ -112,6 +130,7 @@ class RosBridgeConnection(QObject):
             "sensor_msgs/msg/BatteryState"
         )
         self.battery_topic.subscribe(self._on_battery_message)
+        self._start_is_awake_timer()
 
         # Signals to the app that it is ready
         self.connected.emit()
@@ -120,7 +139,12 @@ class RosBridgeConnection(QObject):
     def _start_cmd_vel_timer(self):
         self._cmd_vel_timer.start()
 
+    @pyqtSlot()
+    def _start_is_awake_timer(self):
+        self._is_awake_timer.start()
+
     def _on_close(self, *args):
+        self._is_awake_timer.stop()
         self._is_connected = False
         self.disconnected.emit()
 
@@ -159,3 +183,12 @@ class RosBridgeConnection(QObject):
             },
         })
         self.cmd_vel_topic.publish(msg)
+
+    def _publish_heartbeat(self):
+        if not self._is_connected or self.is_awake_topic is None:
+            return
+
+        msg = roslibpy.Message({
+            "data": True
+        })        
+        self.is_awake_topic.publish(msg)
