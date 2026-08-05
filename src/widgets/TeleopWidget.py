@@ -56,6 +56,7 @@ class TeleopWidget(QGroupBox):
 
     def __init__(self):
         super().__init__("Teleop Control")
+        self.enabled = False
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
         layout = QVBoxLayout()
@@ -209,49 +210,52 @@ class TeleopWidget(QGroupBox):
     def _send(self, linear_dir: int, angular_dir: int):
         linear = linear_dir * self.linear_speed_spin.value()
         angular = angular_dir * self.angular_speed_spin.value()
-        # print(f"[TeleopWidget.py]: (publish /cmd_vel) Linear.x: {linear} | Angular.z: {angular}")
         self.velocity_command.emit(linear, angular)
 
     def set_enabled_controls(self, enabled: bool):
         for btn in (self.btn_forward, self.btn_backward, self.btn_left, 
                     self.btn_right, self.btn_stop):
             btn.setEnabled(enabled)
+        self.enabled = enabled
 
     def keyPressEvent(self, event: QKeyEvent):
         if event.isAutoRepeat():
             return
 
         key = event.key()
-        if key == Qt.Key.Key_Up:
-            self.btn_forward.setDown(True)
-            self._send(1, 0)
-        elif key == Qt.Key.Key_Down:
-            self.btn_backward.setDown(True)
-            self._send(-1, 0)
-        elif key == Qt.Key.Key_Left:
-            self.btn_left.setDown(True)
-            self._send(0, 1)
-        elif key == Qt.Key.Key_Right:
-            self.btn_right.setDown(True)
-            self._send(0, -1)
-        elif key == Qt.Key.Key_Space:
-            self.btn_stop.setDown(True)
-        elif key == Qt.Key.Key_W:
-            self.linear_speed_spin.setValue(
-                self.linear_speed_spin.value() + self.STEP_INTERVAL_LINEAR_VELOCITY
-            )
-        elif key == Qt.Key.Key_S:
-            self.linear_speed_spin.setValue(
-                self.linear_speed_spin.value() - self.STEP_INTERVAL_LINEAR_VELOCITY
-            )
-        elif key == Qt.Key.Key_Q:
-            self.angular_speed_spin.setValue(
-                self.angular_speed_spin.value() + self.STEP_INTERVAL_ANGULAR_VELOCITY
-            )
-        elif key == Qt.Key.Key_A:
-            self.angular_speed_spin.setValue(
-                self.angular_speed_spin.value() - self.STEP_INTERVAL_ANGULAR_VELOCITY
-            )
+        if self.enabled:
+            if key == Qt.Key.Key_Up:
+                self.btn_forward.setDown(True)
+                self._send(1, 0)
+            elif key == Qt.Key.Key_Down:
+                self.btn_backward.setDown(True)
+                self._send(-1, 0)
+            elif key == Qt.Key.Key_Left:
+                self.btn_left.setDown(True)
+                self._send(0, 1)
+            elif key == Qt.Key.Key_Right:
+                self.btn_right.setDown(True)
+                self._send(0, -1)
+            elif key == Qt.Key.Key_Space:
+                self.btn_stop.setDown(True)
+            elif key == Qt.Key.Key_W:
+                self.linear_speed_spin.setValue(
+                    self.linear_speed_spin.value() + self.STEP_INTERVAL_LINEAR_VELOCITY
+                )
+            elif key == Qt.Key.Key_S:
+                self.linear_speed_spin.setValue(
+                    self.linear_speed_spin.value() - self.STEP_INTERVAL_LINEAR_VELOCITY
+                )
+            elif key == Qt.Key.Key_Q:
+                self.angular_speed_spin.setValue(
+                    self.angular_speed_spin.value() + self.STEP_INTERVAL_ANGULAR_VELOCITY
+                )
+            elif key == Qt.Key.Key_A:
+                self.angular_speed_spin.setValue(
+                    self.angular_speed_spin.value() - self.STEP_INTERVAL_ANGULAR_VELOCITY
+                )
+            else:
+                super().keyPressEvent(event)
         else:
             super().keyPressEvent(event)
 
@@ -260,20 +264,23 @@ class TeleopWidget(QGroupBox):
             return
 
         key = event.key()
-        if key == Qt.Key.Key_Up:
-            self.btn_forward.setDown(False)
-            self._send(0, 0)
-        elif key == Qt.Key.Key_Down:
-            self.btn_backward.setDown(False)
-            self._send(0, 0)
-        elif key == Qt.Key.Key_Left:
-            self.btn_left.setDown(False)
-            self._send(0, 0)
-        elif key == Qt.Key.Key_Right:
-            self.btn_right.setDown(False)
-            self._send(0, 0)
-        elif key == Qt.Key.Key_Space:
-            self.btn_stop.setDown(False)
+        if self.enabled:
+            if key == Qt.Key.Key_Up:
+                self.btn_forward.setDown(False)
+                self._send(0, 0)
+            elif key == Qt.Key.Key_Down:
+                self.btn_backward.setDown(False)
+                self._send(0, 0)
+            elif key == Qt.Key.Key_Left:
+                self.btn_left.setDown(False)
+                self._send(0, 0)
+            elif key == Qt.Key.Key_Right:
+                self.btn_right.setDown(False)
+                self._send(0, 0)
+            elif key == Qt.Key.Key_Space:
+                self.btn_stop.setDown(False)
+            else:
+                super().keyReleaseEvent(event)
         else:
             super().keyReleaseEvent(event)
 
