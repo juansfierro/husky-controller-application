@@ -47,7 +47,7 @@ class TeleopWidget(QGroupBox):
 
     #Linear velocity range
     MAX_LINEAR_VELOCITY = 2.0
-    MIN_LINEAR_VELOCITY = 0.1
+    MIN_LINEAR_VELOCITY = 0.01
     STEP_INTERVAL_LINEAR_VELOCITY = 0.1
 
     MAX_ANGULAR_VELOCITY = 2.0
