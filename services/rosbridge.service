@@ -1,0 +1,22 @@
+# ------------- CURRENTLY DISABLED -------------
+
+# THIS SERVICE IS CURRENTLY DISABLED DUE TO BUGS
+# DO NOT ENABLE IT AND IF ENABLED, DISABLE.
+# PREFER RUNNING "start_rosbridge.sh" IN AN SSH
+# TERMINAL FOR THE TIME BEING.
+
+# ------------- CURRENTLY DISABLED -------------
+[Unit]
+Description=Source ros2 and start rosbridge_server websocket
+After=network-online.target
+Wants=network-online.target
+
+[service]
+Type=simple
+User=<user> # Replace before running
+ExecStart=< /path/to/start_rosbridge.sh >
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

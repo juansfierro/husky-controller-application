@@ -1,0 +1,14 @@
+[Unit]
+Description=FFmpeg camera stream service. Streams from /dev/video0 via UDP on port 5000
+After=network-online.target
+Wants=network-online.target
+
+[service]
+Type=simple
+ExecStart=< /path/to/start_video_stream.sh >
+Restart=always
+RestartSec=5
+User=root
+
+[Install]
+WantedBy=multi-user.target
