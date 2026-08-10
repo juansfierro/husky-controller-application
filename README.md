@@ -1,4 +1,24 @@
 # husky-controller-application
+A PyQt6 application used to remotely control the UPR02 Clearpath A200 Husky over Wi-Fi.
+
+## Setup
+- Install dependencies on Secondary Computer:
+  - rosbridge_server
+  - ffmpeg
+
+- (Optional Recommenced) Copy the bash `.sh` scripts to /usr/local/bin/ directory.
+
+- Set the script's directory in the `.service` files and move them to `/etc/systemd/system/` directory
+
+- Enable and start the services
+```
+sudo systemctl daemon-reload
+sudo systemctl start husky_camera.service
+sudo systemctl enable husky_camera.service
+
+sudo systemctl start rosbridge.service
+sudo systemctl enable rosbridge.service
+```
 
 ## How To Run
 Install the required pip packages in `requirements.txt`.
