@@ -1,0 +1,211 @@
+# =========================== Usage Options ===========================
+#
+#   Full automated benchmark suite: python3 run_automated_benchmarks.py
+#   Standalone analysis of report: python3 run_automated_benchmarks.py --analyze latency_report_file.json
+#
+# =====================================================================
+
+
+import sys
+import argparse
+import json
+import time
+import os
+import numpy as np
+import roslibpy
+from PyQt6.QtCore import (
+    QCoreApplication
+)
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+# Import the RosBridgeConnection class
+from RosBridgeConnection import RosBridgeConnection
+
+ROSBROKER_IP = "192.168.0.102"
+ROSBROKER_PORT = 9090
+NAMESPACE = "/a200_0867"
+NUM_TRIALS = 25
+STEP_VELOCITY = 0.3
+COOLDOWN_SEC = 2.5
+
+
+def run_test_suite():
+    app = QCoreApplication.instance() or QCoreApplication(sys.argv)
+
+    print(f"Connecting to RosBridge server at {ROSBROKER_IP}:{ROSBROKER_PORT}...")
+    ros_conn = RosBridgeConnection()
+    ros_conn.connect_to_bridge(ROSBROKER_IP, ROSBROKER_PORT)
+    app.processEvents()
+
+    if not ros_conn.is_connected():
+        raise ConnectionError(
+            f"[ERROR] Failed to establish RosBridge connection to {ROSBROKER_IP}:{ROSBROKER_PORT}"
+        )
+
+    print("[SUCCESS] Connected to RosBridge.")
+
+    client = ros_conn.client
+    rpi_sub = roslibpy.Topic(client, "pi_test_metrics", "std_msgs/msg/String")
+    husky_sub = roslibpy.Topic(client, f"{NAMESPACE}/test_metrics", "std_msgs/msg/String")
+
+    trial_data = {}
+
+    def pi_callback(msg):
+        data = json.loads(msg['data'])
+        trial_id = data.get('trial_id')
+        if trial_id in trial_data:
+            trial_data[trial_id]["pi_recv_stamp"] = data["pi_recv_stamp"]
+            print(f"  [<-] Received Pi timestamp for {trial_id}")
+
+    def husky_callback(msg):
+        data = json.loads(msg['data'])
+        trial_id = data.get('trial_id')
+        if trial_id in trial_data:
+            trial_data[trial_id]['husky_recv_stamp'] = data['husky_recv_stamp']
+            trial_data[trial_id]['wheel_motion_stamp'] = data['wheel_motion_stamp']
+            trial_data[trial_id]['actuation_delay_ms'] = data['actuation_delay_ms']
+            print(f"  [<-] Received Husky Actuation delay for {trial_id}: {data['actuation_delay_ms']} ms")
+
+    rpi_sub.subscribe(pi_callback)
+    husky_sub.subscribe(husky_callback)
+    time.sleep(1.0)
+
+    print(f"Starting Automated Latency Suite ({NUM_TRIALS} Trials)...")
+
+    try:
+        for seq in range(1, NUM_TRIALS + 1):
+            if not ros_conn.is_connected():
+                print(f"[!] Connection lost at trial {seq}. Aborting test suite.")
+                break
+
+            trial_id = f"trial_{seq}"
+
+            # 1. Ensure Husky is fully stopped before starting trial
+            ros_conn.publish_velocity(0.0, 0.0)
+            time.sleep(COOLDOWN_SEC)
+
+            # 2. Record Client Timestamp and Send Command
+            now = time.time()
+            
+            trial_data[trial_id] = {
+                "trial_id": trial_id,
+                "client_sent_stamp": now,
+                "pi_recv_stamp": None,
+                "husky_recv_stamp": None,
+                "wheel_motion_stamp": None,
+                "actuation_delay_ms": None
+            }
+
+            print(f"Trial {trial_id}/{NUM_TRIALS} dispatched...")
+
+            # Stream commands at 10 Hz during the wait period to emulate real streaming 
+            # and keep motor controller watchdogs satisfied.
+            wait_start = time.time()
+            last_pub_time = 0
+            
+            while trial_data[trial_id]['actuation_delay_ms'] is None and (time.time() - wait_start) < 2.5:
+                app.processEvents()
+                current_time = time.time()
+                
+                # 10 Hz publication loop
+                if (current_time - last_pub_time) >= 0.1:
+                    ros_conn.publish_velocity(STEP_VELOCITY, 0.0)
+                    last_pub_time = current_time
+                    
+                time.sleep(0.01)
+
+    finally:
+        if ros_conn.is_connected():
+            ros_conn.publish_velocity(0.0, 0.0)
+            rpi_sub.unsubscribe()
+            husky_sub.unsubscribe()
+            ros_conn.disconnect_from_bridge()
+
+    raw_file = "latency_report_file.json"
+    with open(raw_file, "w") as f:
+        json.dump(trial_data, f, indent=4)
+
+    analyze_and_save_results(raw_file)
+
+
+def analyze_and_save_results(input_source, output_filepath="husky_latency_suite_report.json"):
+    if isinstance(input_source, str):
+        with open(input_source, "r") as f:
+            raw = json.load(f)
+            trial_data = raw.get("trials", raw)
+    elif isinstance(input_source, dict):
+        trial_data = input_source.get("trials", input_source)
+    else:
+        raise ValueError("input_source must be a dictionary or file path string.")
+
+    actuation_delays = []
+    client_to_pi_latencies = []
+    pi_to_husky_latencies = []
+    total_pipeline_latencies = []
+
+    for trial_id, metrics in trial_data.items():
+        if metrics.get('actuation_delay_ms') is not None:
+            actuation_delays.append(metrics['actuation_delay_ms'])
+
+        if metrics.get('pi_recv_stamp') and metrics.get('client_sent_stamp'):
+            client_to_pi_latencies.append((metrics['pi_recv_stamp'] - metrics['client_sent_stamp']) * 1000.0)
+
+        if metrics.get('husky_recv_stamp') and metrics.get('pi_recv_stamp'):
+            pi_to_husky_latencies.append((metrics['husky_recv_stamp'] - metrics['pi_recv_stamp']) * 1000.0)
+
+        if metrics.get('wheel_motion_stamp') and metrics.get('client_sent_stamp'):
+            total_pipeline_latencies.append((metrics['wheel_motion_stamp'] - metrics['client_sent_stamp']) * 1000.0)
+
+    summary = {
+        "total_trials": len(trial_data),
+        "valid_trials": len(actuation_delays),
+        "actuation_delay_ms": compute_stats(actuation_delays),
+        "client_to_pi_ms": compute_stats(client_to_pi_latencies),
+        "pi_to_husky_ms": compute_stats(pi_to_husky_latencies),
+        "total_command_to_motion_ms": compute_stats(total_pipeline_latencies)
+    }
+
+    report = {"summary": summary, "trials": trial_data}
+
+    with open(output_filepath, "w") as f:
+        json.dump(report, f, indent=4)
+
+    print("\n================== BENCHMARK SUMMARY ==================")
+    print(f"Total Trials Evaluated:                 {summary['total_trials']}")
+    print(f"Valid Actuation Trials:                 {summary['valid_trials']}")
+    print(f"Actuation Delay (Husky Recv -> Motion): {summary['actuation_delay_ms']['mean']} ms (±{summary['actuation_delay_ms']['std']} ms)")
+    print(f"Client -> Pi Latency:                   {summary['client_to_pi_ms']['mean']} ms")
+    print(f"Pi -> Husky PC Latency:                 {summary['pi_to_husky_ms']['mean']} ms")
+    print(f"Total Command -> Motion Pipeline:       {summary['total_command_to_motion_ms']['mean']} ms")
+    print(f"Summary Report saved to:                {output_filepath}")
+    print("=======================================================")
+
+
+def compute_stats(arr):
+    if not arr:
+        return {"mean": 0, "std": 0, "min": 0, "max": 0, "p95": 0}
+    np_arr = np.array(arr)
+    return {
+        "mean": round(float(np.mean(np_arr)), 2),
+        "std": round(float(np.std(np_arr)), 2),
+        "min": round(float(np.min(np_arr)), 2),
+        "max": round(float(np.max(np_arr)), 2),
+        "p95": round(float(np.percentile(np_arr, 95)), 2)
+    }
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description="RosBridge Latency Suite & Analysis Tool")
+    parser.add_argument(
+        "--analyze",
+        type=str,
+        metavar="JSON_FILE",
+        help="Run analysis directly on an existing JSON report file (e.g., latency_report_file.json)"
+    )
+    args = parser.parse_args()
+
+    if args.analyze:
+        analyze_and_save_results(args.analyze)
+    else:
+        run_test_suite()
