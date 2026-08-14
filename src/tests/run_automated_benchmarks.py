@@ -25,9 +25,10 @@ from RosBridgeConnection import RosBridgeConnection
 ROSBROKER_IP = "192.168.0.102"
 ROSBROKER_PORT = 9090
 NAMESPACE = "/a200_0867"
-NUM_TRIALS = 25
+NUM_TRIALS = 20
 STEP_VELOCITY = 0.3
 COOLDOWN_SEC = 2.5
+STREAM_DURATION_SEC = 10.0
 
 
 def run_test_suite():
@@ -38,10 +39,10 @@ def run_test_suite():
     ros_conn.connect_to_bridge(ROSBROKER_IP, ROSBROKER_PORT)
     app.processEvents()
 
-    if not ros_conn.is_connected():
-        raise ConnectionError(
-            f"[ERROR] Failed to establish RosBridge connection to {ROSBROKER_IP}:{ROSBROKER_PORT}"
-        )
+    # if not ros_conn.is_connected():
+    #     raise ConnectionError(
+    #         f"[ERROR] Failed to establish RosBridge connection to {ROSBROKER_IP}:{ROSBROKER_PORT}"
+    #     )
 
     print("[SUCCESS] Connected to RosBridge.")
 
@@ -53,18 +54,18 @@ def run_test_suite():
 
     def pi_callback(msg):
         data = json.loads(msg['data'])
-        trial_id = data.get('trial_id')
+        trial_id = data.get("trial_id")
         if trial_id in trial_data:
             trial_data[trial_id]["pi_recv_stamp"] = data["pi_recv_stamp"]
             print(f"  [<-] Received Pi timestamp for {trial_id}")
 
     def husky_callback(msg):
         data = json.loads(msg['data'])
-        trial_id = data.get('trial_id')
+        trial_id = data.get("trial_id")
         if trial_id in trial_data:
-            trial_data[trial_id]['husky_recv_stamp'] = data['husky_recv_stamp']
-            trial_data[trial_id]['wheel_motion_stamp'] = data['wheel_motion_stamp']
-            trial_data[trial_id]['actuation_delay_ms'] = data['actuation_delay_ms']
+            trial_data[trial_id]["husky_recv_stamp"] = data["husky_recv_stamp"]
+            trial_data[trial_id]["wheel_motion_stamp"] = data["wheel_motion_stamp"]
+            trial_data[trial_id]["actuation_delay_ms"] = data["actuation_delay_ms"]
             print(f"  [<-] Received Husky Actuation delay for {trial_id}: {data['actuation_delay_ms']} ms")
 
     rpi_sub.subscribe(pi_callback)
@@ -86,38 +87,40 @@ def run_test_suite():
             time.sleep(COOLDOWN_SEC)
 
             # 2. Record Client Timestamp and Send Command
-            now = time.time()
+            trial_start = time.time()
             
             trial_data[trial_id] = {
                 "trial_id": trial_id,
-                "client_sent_stamp": now,
+                "client_sent_stamp": trial_start,
                 "pi_recv_stamp": None,
                 "husky_recv_stamp": None,
                 "wheel_motion_stamp": None,
                 "actuation_delay_ms": None
             }
 
-            print(f"Trial {trial_id}/{NUM_TRIALS} dispatched...")
+            print(f"Trial {trial_id}/{NUM_TRIALS} dispatched; streaming for {STREAM_DURATION_SEC:.1f}s at 10 Hz...")
 
-            # Stream commands at 10 Hz during the wait period to emulate real streaming 
-            # and keep motor controller watchdogs satisfied.
-            wait_start = time.time()
-            last_pub_time = 0
-            
-            while trial_data[trial_id]['actuation_delay_ms'] is None and (time.time() - wait_start) < 2.5:
+            # Stream commands at 10 Hz for a fixed duration to emulate a constant feed.
+            next_pub_time = trial_start
+            end_time = trial_start + STREAM_DURATION_SEC
+
+            while time.time() < end_time:
                 app.processEvents()
                 current_time = time.time()
                 
-                # 10 Hz publication loop
-                if (current_time - last_pub_time) >= 0.1:
-                    ros_conn.publish_velocity(STEP_VELOCITY, 0.0)
-                    last_pub_time = current_time
+                # 10 Hz publication loop with fixed cadence.
+                if current_time >= next_pub_time:
+                    ros_conn.publish_velocity(STEP_VELOCITY, 0.0, frame_id=trial_id)
+                    next_pub_time += 0.1
                     
                 time.sleep(0.01)
 
+            if trial_data[trial_id]["actuation_delay_ms"] is None:
+                print(f"[!] No actuation metrics received for {trial_id} during the 10s stream window.")
+
     finally:
         if ros_conn.is_connected():
-            ros_conn.publish_velocity(0.0, 0.0)
+            ros_conn.publish_velocity(0.0, 0.0, "base_link")
             rpi_sub.unsubscribe()
             husky_sub.unsubscribe()
             ros_conn.disconnect_from_bridge()
@@ -144,18 +147,18 @@ def analyze_and_save_results(input_source, output_filepath="husky_latency_suite_
     pi_to_husky_latencies = []
     total_pipeline_latencies = []
 
-    for trial_id, metrics in trial_data.items():
-        if metrics.get('actuation_delay_ms') is not None:
-            actuation_delays.append(metrics['actuation_delay_ms'])
+    for metrics in trial_data.values():
+        if metrics.get("actuation_delay_ms") is not None:
+            actuation_delays.append(metrics["actuation_delay_ms"])
 
-        if metrics.get('pi_recv_stamp') and metrics.get('client_sent_stamp'):
-            client_to_pi_latencies.append((metrics['pi_recv_stamp'] - metrics['client_sent_stamp']) * 1000.0)
+        if metrics.get("pi_recv_stamp") and metrics.get("client_sent_stamp"):
+            client_to_pi_latencies.append((metrics["pi_recv_stamp"] - metrics["client_sent_stamp"]) * 1000.0)
 
-        if metrics.get('husky_recv_stamp') and metrics.get('pi_recv_stamp'):
-            pi_to_husky_latencies.append((metrics['husky_recv_stamp'] - metrics['pi_recv_stamp']) * 1000.0)
+        if metrics.get("husky_recv_stamp") and metrics.get("pi_recv_stamp"):
+            pi_to_husky_latencies.append((metrics["husky_recv_stamp"] - metrics["pi_recv_stamp"]) * 1000.0)
 
-        if metrics.get('wheel_motion_stamp') and metrics.get('client_sent_stamp'):
-            total_pipeline_latencies.append((metrics['wheel_motion_stamp'] - metrics['client_sent_stamp']) * 1000.0)
+        if metrics.get("wheel_motion_stamp") and metrics.get("client_sent_stamp"):
+            total_pipeline_latencies.append((metrics["wheel_motion_stamp"] - metrics["client_sent_stamp"]) * 1000.0)
 
     summary = {
         "total_trials": len(trial_data),

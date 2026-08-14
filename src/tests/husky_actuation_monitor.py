@@ -61,7 +61,7 @@ class HuskyActuationMonitor(Node):
                 self.waiting_for_motion = False  # Reset state for next iteration
 
 def main(args=None):
-    rclpy.init()
+    rclpy.init(args=args)
     monitor = HuskyActuationMonitor()
     rclpy.spin(monitor)
     rclpy.shutdown()

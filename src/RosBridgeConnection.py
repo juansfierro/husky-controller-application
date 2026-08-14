@@ -157,14 +157,14 @@ class RosBridgeConnection(QObject):
     def _on_battery_message(self, message: dict):
         self.battery_received.emit(message)
 
-    def publish_velocity(self, linear_x: float, angular_z: float):
+    def publish_velocity(self, linear_x: float, angular_z: float, frame_id: str="base_link"):
         self._current_linear_x = linear_x
         self._current_angular_z = angular_z
         print(f"[RosBridgeConnection.py]: (publish_velocity) Linear.x: {linear_x} | Angular.z: {angular_z}")
 
-        self._publish_current_velocity()
+        self._publish_current_velocity(frame_id)
 
-    def _publish_current_velocity(self):
+    def _publish_current_velocity(self, frame_id: str = "base_link"):
         if not self._is_connected or self.cmd_vel_topic is None:
             return
 
@@ -175,7 +175,7 @@ class RosBridgeConnection(QObject):
                     "sec": int(now),
                     "nanosec": int((now % 1) * 1e9),
                 },
-                "frame_id": "base_link",
+                    "frame_id": frame_id,
             },
             "twist": {
                 "linear": { 'x': self._current_linear_x, 'y': 0.0, 'z': 0.0},

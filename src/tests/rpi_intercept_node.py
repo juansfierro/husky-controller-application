@@ -28,7 +28,7 @@ class PiInterceptNode(Node):
         self.metrics_pub.publish(out_msg)
 
 def main(args=None):
-    rclpy.init()
+    rclpy.init(args=args)
     node = PiInterceptNode()
     rclpy.spin(node)
     rclpy.shutdown()
