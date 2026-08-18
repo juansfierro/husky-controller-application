@@ -157,23 +157,27 @@ class RosBridgeConnection(QObject):
     def _on_battery_message(self, message: dict):
         self.battery_received.emit(message)
 
-    def publish_velocity(self, linear_x: float, angular_z: float, frame_id: str="base_link"):
+    def publish_velocity(self, linear_x: float, angular_z: float, frame_id: str="base_link") -> float:
         self._current_linear_x = linear_x
         self._current_angular_z = angular_z
         print(f"[RosBridgeConnection.py]: (publish_velocity) Linear.x: {linear_x} | Angular.z: {angular_z}")
 
-        self._publish_current_velocity(frame_id)
+        now = time.time()
+        self._publish_current_velocity(frame_id, send_time=now)
+        return now
 
-    def _publish_current_velocity(self, frame_id: str = "base_link"):
+    def _publish_current_velocity(self, frame_id: str = "base_link", send_time: float | None = None):
         if not self._is_connected or self.cmd_vel_topic is None:
             return
 
-        now = time.time()
+        if send_time is None:
+            send_time = time.time()
+
         msg = roslibpy.Message({
             "header": {
                 "stamp": {
-                    "sec": int(now),
-                    "nanosec": int((now % 1) * 1e9),
+                    "sec": int(send_time),
+                    "nanosec": int((send_time % 1) * 1e9),
                 },
                     "frame_id": frame_id,
             },

@@ -21,7 +21,8 @@ class PiInterceptNode(Node):
         payload = {
             "trial_id": msg.header.frame_id,
             "msg_stamp_sec": msg_stamp,
-            "pi_recv_stamp": pi_recv_time
+            "pi_recv_stamp": pi_recv_time,
+            "command_send_delta_ms": (pi_recv_time - msg_stamp) * 1000.0
         }
         out_msg = String()
         out_msg.data = json.dumps(payload)
