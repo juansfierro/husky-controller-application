@@ -14,10 +14,7 @@ class HuskyActuationMonitor(Node):
     def __init__(self):
         super().__init__("husky_actuation_monitor")
 
-        self.current_trial_id = None
-        self.cmd_recv_time = None
-        self.msg_stamp = None
-        self.waiting_for_motion = False
+        self.pending_commands = {}
 
         self.metrics_pub = self.create_publisher(String, f"{NAMESPACE}/test_metrics", 10 )
         
@@ -26,39 +23,56 @@ class HuskyActuationMonitor(Node):
         self.joint_sub = self.create_subscription(JointState, f"{NAMESPACE}/platform/joint_states", self.joint_callback, 10)
 
     def cmd_callback(self, msg):
-        # Ignore zero velocity stop commands for test triggers
-        if msg.twist.linear.x > 0 and not self.waiting_for_motion:
-            self.cmd_recv_time = self.get_clock().now().nanoseconds / 1e9
-            self.msg_stamp = msg.header.stamp.sec + (msg.header.stamp.nanosec / 1e9)
-            self.current_trial_id = msg.header.frame_id
-            self.waiting_for_motion = True
+        # Ignore zero velocity stop commands for test triggers.
+        if msg.twist.linear.x <= 0:
+            return
+
+        command_id = msg.header.frame_id or "unknown_command"
+        self.pending_commands[command_id] = {
+            "cmd_recv_time": self.get_clock().now().nanoseconds / 1e9,
+            "msg_stamp": msg.header.stamp.sec + (msg.header.stamp.nanosec / 1e9),
+        }
 
     def joint_callback(self, msg):
-        if self.waiting_for_motion:
-            # JointState 'velocity' contains an array of wheel speeds.
-            # We check if any of the wheels exceed the physical movement threshold.
-            if msg.velocity:
-                max_wheel_speed = max([abs(v) for v in msg.velocity])
-            else:
-                max_wheel_speed = 0.0
-            
-            if max_wheel_speed >= VELOCITY_THRESHOLD:
-                motion_detected_time = self.get_clock().now().nanoseconds / 1e9
-                actuation_delay_ms = (motion_detected_time - self.cmd_recv_time) * 1000.0
+        if not self.pending_commands:
+            return
 
-                payload = {
-                    "trial_id": self.current_trial_id,
-                    "msg_stamp": self.msg_stamp,
-                    "husky_recv_stamp": self.cmd_recv_time,
-                    "wheel_motion_stamp": motion_detected_time,
-                    "actuation_delay_ms": round(actuation_delay_ms, 2)
-                }
-                out_msg = String()
-                out_msg.data = json.dumps(payload)
-                self.metrics_pub.publish(out_msg)
-                
-                self.get_logger().info(f"Motion detected for {self.current_trial_id}. Delay: {actuation_delay_ms:.2f} ms")
-                self.waiting_for_motion = False  # Reset state for next iteration
+        # JointState 'velocity' contains an array of wheel speeds.
+        # We check if any of the wheels exceed the physical movement threshold.
+        if msg.velocity:
+            max_wheel_speed = max([abs(v) for v in msg.velocity])
+        else:
+            max_wheel_speed = 0.0
+
+        if max_wheel_speed < VELOCITY_THRESHOLD:
+            return
+
+        motion_detected_time = self.get_clock().now().nanoseconds / 1e9
+
+        # Match the first pending command in arrival order; this prevents the monitor
+        # from dropping commands when the robot is still moving or when multiple commands
+        # are queued during a test burst.
+        command_id = min(
+            self.pending_commands,
+            key=lambda cid: self.pending_commands[cid]["cmd_recv_time"]
+        )
+        cmd_info = self.pending_commands.pop(command_id)
+        actuation_delay_ms = (motion_detected_time - cmd_info["cmd_recv_time"]) * 1000.0
+
+        payload = {
+            "trial_id": command_id,
+            "msg_stamp": cmd_info["msg_stamp"],
+            "husky_recv_stamp": cmd_info["cmd_recv_time"],
+            "wheel_motion_stamp": motion_detected_time,
+            "actuation_delay_ms": round(actuation_delay_ms, 2)
+        }
+        out_msg = String()
+        out_msg.data = json.dumps(payload)
+        self.metrics_pub.publish(out_msg)
+
+        self.get_logger().info(
+            f"Motion detected for {command_id}. Delay: {actuation_delay_ms:.2f} ms"
+        )
 
 def main(args=None):
     rclpy.init(args=args)

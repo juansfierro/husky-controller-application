@@ -25,10 +25,10 @@ from RosBridgeConnection import RosBridgeConnection
 ROSBROKER_IP = "192.168.0.102"
 ROSBROKER_PORT = 9090
 NAMESPACE = "/a200_0867"
-NUM_TRIALS = 5
+NUM_TRIALS = 20
 STEP_VELOCITY = 0.3
 COOLDOWN_SEC = 2.5
-STREAM_DURATION_SEC = 10.0
+STREAM_DURATION_SEC = 5.0
 
 
 def build_command_id(trial_id: str, command_index: int) -> str:
